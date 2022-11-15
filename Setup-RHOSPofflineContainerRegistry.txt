@@ -1,0 +1,57 @@
+## Source(s):
+## - https://access.redhat.com/solutions/5752401
+##
+## kludged together by Jeff Pettorino
+## 2022-Nov-15
+## v 0.1
+##
+##
+## "If you want to make an apple pie from scratch, you must first create the Universe." -Carl Sagan
+##
+## First, setup your RHEL8 system with Internet access, registered with RHSM
+## Per line 21, the login user is 'stackegs' and password is 'stackpass'
+## This is a manual process requiring Operator interaction for some steps.
+
+sudo -i
+dnf module install container-tools
+dnf install httpd-tools podman-docker
+
+mkdir -p /opt/registry/{auth,certs,data}
+
+htpasswd -bBc /opt/registry/auth/htpasswd stackegs stackpass
+
+openssl req -newkey rsa:4096 -nodes -sha256 -keyout /opt/registry/certs/domain.key -x509 -days 365 -out /opt/registry/certs/domain.crt -addext "subjectAltName = IP:192.168.5.147"
+## ** answer all prompts with a single period EXCEPT for the CN prompt, which must be the IP specified above **
+
+cp /opt/registry/certs/domain.crt /etc/pki/ca-trust/source/anchors/
+update-ca-trust
+
+firewall-cmd --add-port=5000/tcp --zone=internal --permanent
+firewall-cmd --add-port=5000/tcp --zone=public --permanent
+firewall-cmd --reload
+
+podman run --name rhosp-registry \
+-p 5000:5000 \
+-v /opt/registry/data:/var/lib/registry:z \
+-v /opt/registry/auth:/auth:z \
+-v /opt/registry/certs:/certs:z \
+-e "REGISTRY_AUTH=htpasswd" \
+-e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
+-e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+-e "REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt" \
+-e "REGISTRY_HTTP_TLS_KEY=/certs/domain.key" \
+-e REGISTRY_COMPATIBILITY_SCHEMA1_ENABLED=true \
+-d docker.io/library/registry:latest 
+
+openssl s_client -connect 192.168.1.45:5000 -servername 192.168.1.45
+
+podman login https://192.168.1.45:5000 --tls-verify=false
+
+curl https://192.168.1.45:5000/v2/_catalog
+
+podman pull registry.redhat.io/rhel8/toolbox
+podman tag registry.redhat.io/rhel8/toolbox 192.168.1.45:5000/rhel8/toolbox
+podman push registry.redhat.io/rhel8/toolbox 192.168.1.45:5000/rhel8/toolbox --tls-verify=false --remove-signatures
+
+
+

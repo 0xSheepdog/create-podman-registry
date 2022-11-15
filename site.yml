@@ -1,0 +1,79 @@
+## Based on this article - https://access.redhat.com/solutions/5752401
+---
+- hosts: all
+  vars:
+    my_container_storage_path: "/data/registry"
+    my_registry_user: imageuser
+    my_registry_user_pass: imageuserpass
+  tasks:
+
+  - name: Install the container-tools dnf module
+    command: dnf module install -y container-tools
+    warn: false
+
+  - name:
+    dnf:
+      name:
+      - httpd-tools
+      - podman-docker
+    state: present
+
+  - name: Create storage paths
+    file:
+      path: "{{ my_container_storage_path }}/{{ item }}"
+      state: directory
+      mode: '0755'
+    loop:
+      - auth
+      - certs
+      - data
+
+  - name: Create the htpasswd credentials
+    htpasswd:
+      path: "{{ my_container_storage_path }}/auth/htpasswd"
+      name: "{{ my_registry_user }}"
+      password: "{{ my_registry_user_pass }}"
+      owner: root
+      group: root
+      mode: '0640'
+
+  - name: OpenSSL tasks
+    tags: openssl
+    block:
+    - name: Generate OpenSSL key/certificate
+      command: openssl req -newkey rsa:4096 -nodes -sha256 -keyout /opt/registry/certs/domain.key -x509 -days 1827 -out /opt/registry/certs/domain.crt -addext "subjectAltName = IP:{{ ansible_default_ipv4.address }}"
+    - name: Copy new certificate to local ca-trust
+      copy:
+        src: /opt/registry/certs/domain.crt
+        dest: /etc/pki/ca-trust/source/anchors/
+        remote_src: yes
+    - name: Update the ca-trust store
+      command: update-ca-trust
+
+  - name: Open firewall ports
+    firewalld:
+      port: 5000/tcp
+      zone: "{{ item }}"
+      state: enabled
+      permanent: yes
+    loop:
+    - public
+    - internal
+
+  - name: Podman - pull and create the registry container
+    tags: run-container
+    raw: >
+      podman run --name local-registry
+      -p 5000:5000
+      -v {{ my_container_storage_path|quote }}/data:/var/lib/registry:z
+      -v {{ my_container_storage_path|quote }}/auth:/auth:z
+      -v {{ my_container_storage_path|quote }}/certs:/certs:z
+      -e "REGISTRY_AUTH=htpasswd"
+      -e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm"
+      -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd
+      -e "REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt"
+      -e "REGISTRY_HTTP_TLS_KEY=/certs/domain.key"
+      -e REGISTRY_COMPATIBILITY_SCHEMA1_ENABLED=true
+      -d docker.io/library/registry:latest
+
+...
