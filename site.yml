@@ -40,8 +40,11 @@
   - name: OpenSSL tasks
     tags: openssl
     block:
+
+## This Wont Work! This openssl command requires interaction at the shell. Must be updated. Broke AF code.
     - name: Generate OpenSSL key/certificate
       command: openssl req -newkey rsa:4096 -nodes -sha256 -keyout /opt/registry/certs/domain.key -x509 -days 1827 -out /opt/registry/certs/domain.crt -addext "subjectAltName = IP:{{ ansible_default_ipv4.address }}"
+    
     - name: Copy new certificate to local ca-trust
       copy:
         src: /opt/registry/certs/domain.crt
