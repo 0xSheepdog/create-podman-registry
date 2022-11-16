@@ -1,0 +1,11 @@
+---
+all:
+  hosts:
+    target:
+      ansible_host: "10.124.0.3"
+  children:
+    my_group:
+      hosts:
+    my_other_group:
+      hosts:
+...

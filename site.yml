@@ -1,6 +1,7 @@
 ## Based on this article - https://access.redhat.com/solutions/5752401
 ---
 - hosts: all
+  remote_user: root
   vars:
     my_container_storage_path: "/data/registry"
     my_registry_user: imageuser
@@ -9,14 +10,13 @@
 
   - name: Install the container-tools dnf module
     command: dnf module install -y container-tools
-    warn: false
 
-  - name:
-    dnf:
+  - name: Install additional tools
+    package:
       name:
       - httpd-tools
       - podman-docker
-    state: present
+      state: present
 
   - name: Create storage paths
     file:
@@ -41,9 +41,18 @@
     tags: openssl
     block:
 
-## This Wont Work! This openssl command requires interaction at the shell. Must be updated. Broke AF code.
     - name: Generate OpenSSL key/certificate
-      command: openssl req -newkey rsa:4096 -nodes -sha256 -keyout /opt/registry/certs/domain.key -x509 -days 1827 -out /opt/registry/certs/domain.crt -addext "subjectAltName = IP:{{ ansible_default_ipv4.address }}"
+      command: >
+        openssl req
+        -batch
+        -newkey rsa:4096
+        -nodes
+        -sha256
+        -keyout /opt/registry/certs/domain.key
+        -x509
+        -days 1827
+        -out /opt/registry/certs/domain.crt
+        -addext "subjectAltName = IP:{{ ansible_default_ipv4.address }}"
     
     - name: Copy new certificate to local ca-trust
       copy:
@@ -64,7 +73,7 @@
     - internal
 
   - name: Podman - pull and create the registry container
-    tags: run-container
+    tags: start_container
     raw: >
       podman run --name local-registry
       -p 5000:5000
