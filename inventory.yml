@@ -2,10 +2,20 @@
 all:
   hosts:
     target:
-      ansible_host: "10.124.0.3"
+      ansible_host: "10.0.0.1"
   children:
     my_group:
       hosts:
+        some_other_target:
+        ansible_host: "10.0.1.1"
     my_other_group:
       hosts:
+        and_yet_another_target:
+        ansible_host: "10.1.0.1"
+    fancy_group_with_subgroups:
+      hosts:
+        can_we_have_any_more_targets:
+        ansible_host: "10.1.1.1"
+      children:
+        my_other_group:
 ...
