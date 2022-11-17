@@ -1,7 +1,7 @@
 ## Based on this article - https://access.redhat.com/solutions/5752401
 ---
 - hosts: all
-  remote_user: root
+  become: true
   vars:
     my_container_storage_path: "/data/registry"
     my_registry_user: imageuser
@@ -10,6 +10,8 @@
 
   - name: Install the container-tools dnf module
     command: dnf module install -y container-tools
+    args:
+      warn: false
 
   - name: Install additional tools
     package:
@@ -29,18 +31,16 @@
       - data
 
   - name: Create the htpasswd credentials
-    htpasswd:
-      path: "{{ my_container_storage_path }}/auth/htpasswd"
-      name: "{{ my_registry_user }}"
-      password: "{{ my_registry_user_pass }}"
-      owner: root
-      group: root
-      mode: '0640'
+    command: >
+      htpasswd
+      -bBc
+      {{ my_container_storage_path }}/auth/htpasswd
+      {{ my_registry_user }}
+      {{ my_registry_user_pass }}
 
   - name: OpenSSL tasks
     tags: openssl
     block:
-
     - name: Generate OpenSSL key/certificate
       command: >
         openssl req
